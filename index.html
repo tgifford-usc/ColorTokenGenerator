@@ -9,21 +9,33 @@
     --bg:#f6f7f9; --panel:#ffffff; --ink:#1a1d23; --sub:#6b7280; --line:#e5e7eb; --accent:#2563eb;
   }
   *{box-sizing:border-box;}
+  /* Fixed-viewport layout for Canvas embeds: the page never grows taller than
+     the iframe — the .palettes region scrolls internally instead. */
+  html, body{height:100%;}
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--ink);
+    overflow:hidden; display:flex; flex-direction:column;
   }
   header{
-    padding:28px 32px 12px; max-width:1400px; margin:0 auto;
+    padding:18px 32px 10px; max-width:1400px; margin:0 auto; width:100%;
+    flex:0 0 auto; display:flex; align-items:baseline; justify-content:space-between; gap:16px;
   }
   header h1{margin:0 0 4px; font-size:1.5rem;}
   header p{margin:0; color:var(--sub); font-size:.92rem; max-width:70ch;}
-  .wrap{max-width:1400px; margin:0 auto; padding:0 32px 60px;}
+  .full-page-link{
+    color:var(--accent); font-size:.85rem; text-decoration:none; white-space:nowrap;
+  }
+  .full-page-link:hover{text-decoration:underline;}
+  .wrap{
+    max-width:1400px; margin:0 auto; padding:0 32px; width:100%;
+    flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+  }
 
   .toolbar{
     display:flex; flex-wrap:wrap; gap:10px; align-items:center;
     background:var(--panel); border:1px solid var(--line); border-radius:12px;
-    padding:14px 16px; margin:20px 0;
+    padding:14px 16px; margin:10px 0 16px; flex:0 0 auto;
   }
   .toolbar button{
     border:1px solid var(--line); background:#fff; color:var(--ink);
@@ -37,7 +49,9 @@
   .toolbar .range-label input[type=range]{width:88px;}
 
   .palettes{
-    display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start;
+    display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; align-content:flex-start;
+    flex:1 1 auto; min-height:0; overflow-y:auto; padding-bottom:32px;
+    overscroll-behavior:contain;
   }
   .palette{
     background:var(--panel); border:1px solid var(--line); border-radius:14px;
@@ -93,12 +107,27 @@
     margin-top:36px; padding-top:20px; border-top:1px solid var(--line); color:var(--sub); font-size:.82rem; line-height:1.5;
   }
   .about code{background:#eef0f3; padding:1px 5px; border-radius:4px;}
+
+  /* Below ~990px the toolbar wraps onto multiple lines; drop the spacer so
+     every row is left-aligned instead of the spacer splitting its row apart. */
+  @media (max-width: 990px){
+    .toolbar .spacer{display:none;}
+  }
+
+  /* Narrow iframe widths (Canvas on mobile renders ~375-420px wide) */
+  @media (max-width: 480px){
+    header{padding:14px 16px 8px;}
+    header h1{font-size:1.2rem;}
+    .wrap{padding:0 16px;}
+    .palette, .add-palette{width:100%;}
+  }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Colour Token Generator</h1>
+  <a class="full-page-link" href="./" target="_blank" rel="noopener">Open full page ↗</a>
 </header>
 
 <div class="wrap">
@@ -208,7 +237,6 @@ function generateName(hue, chroma){
 /* ---------- state & rendering ---------- */
 let palettes = []; // {id, name, hue, chroma}
 let idCounter = 0;
-const PAGE_GUTTER = 64;
 
 function randomPalette(){
   const hue = Math.floor(Math.random()*360);
@@ -233,19 +261,26 @@ function updateLayoutWidth(){
   const container = document.getElementById('palettes');
   if(!wrap) return;
 
+  // Reset to the CSS-driven width before measuring, so measurements aren't
+  // polluted by the width set on a previous run.
+  wrap.style.width = '';
+  if(pageHeader) pageHeader.style.width = '';
+
   const firstPalette = container.querySelector('.palette');
-  if(!firstPalette && !toolbar){
-    wrap.style.width = '';
-    if(pageHeader) pageHeader.style.width = '';
-    return;
-  }
+  if(!firstPalette && !toolbar) return;
+
+  const naturalWidth = wrap.getBoundingClientRect().width;
+  const wrapStyles = window.getComputedStyle(wrap);
+  const gutter = parseFloat(wrapStyles.paddingLeft || '0') + parseFloat(wrapStyles.paddingRight || '0');
 
   let layoutWidth = 0;
   if(firstPalette){
     const paletteWidth = firstPalette.getBoundingClientRect().width;
     const styles = window.getComputedStyle(container);
     const gap = parseFloat(styles.columnGap || styles.gap || '0');
-    const availableWidth = Math.max(paletteWidth, window.innerWidth - PAGE_GUTTER);
+    // clientWidth excludes the container's own vertical scrollbar, so columns
+    // that fit here can't trigger horizontal overflow.
+    const availableWidth = Math.max(paletteWidth, container.clientWidth);
     const paletteCount = Math.max(1, palettes.length);
     const maxColumns = Math.max(1, Math.floor((availableWidth + gap) / (paletteWidth + gap)));
     const columns = Math.min(paletteCount, maxColumns);
@@ -267,7 +302,9 @@ function updateLayoutWidth(){
   }
 
   const contentWidth = Math.max(layoutWidth, toolbarWidth);
-  const pageWidth = `${Math.ceil(contentWidth + PAGE_GUTTER)}px`;
+  // Never exceed the natural width: inside a fixed-size iframe the page must
+  // wrap content rather than scroll horizontally.
+  const pageWidth = `${Math.min(Math.ceil(contentWidth + gutter), Math.floor(naturalWidth))}px`;
   wrap.style.width = pageWidth;
   if(pageHeader) pageHeader.style.width = pageWidth;
 }
