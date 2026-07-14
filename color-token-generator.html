@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colour Token Generator</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1a1d23; --sub:#6b7280; --line:#e5e7eb; --accent:#2563eb;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  header{
+    padding:28px 32px 12px; max-width:1400px; margin:0 auto;
+  }
+  header h1{margin:0 0 4px; font-size:1.5rem;}
+  header p{margin:0; color:var(--sub); font-size:.92rem; max-width:70ch;}
+  .wrap{max-width:1400px; margin:0 auto; padding:0 32px 60px;}
+
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin:20px 0;
+  }
+  .toolbar button{
+    border:1px solid var(--line); background:#fff; color:var(--ink);
+    padding:8px 14px; border-radius:8px; font-size:.85rem; cursor:pointer;
+  }
+  .toolbar button.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .toolbar button:hover{filter:brightness(0.97);}
+  .toolbar label{font-size:.8rem; color:var(--sub); display:flex; align-items:center; gap:6px;}
+  .spacer{flex:1;}
+  .toolbar .range-label{min-width:118px;}
+  .toolbar .range-label input[type=range]{width:88px;}
+
+  .palettes{
+    display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start;
+  }
+  .palette{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px; width:290px; flex:0 0 auto;
+  }
+  .palette-head{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+  }
+  .palette-name{
+    font-weight:600; font-size:1.05rem; background:transparent; border:none; color:var(--ink);
+    width:60%; padding:2px 0; border-bottom:1px dashed transparent;
+  }
+  .palette-name:focus{outline:none; border-bottom:1px dashed var(--sub);}
+  .icon-btn{
+    border:none; background:none; cursor:pointer; color:var(--sub); font-size:.95rem; padding:4px 6px; border-radius:6px;
+  }
+  .icon-btn:hover{background:#f1f2f4; color:var(--ink);}
+
+  .controls{display:flex; flex-direction:column; gap:6px; margin-bottom:12px;}
+  .controls .row{display:flex; align-items:center; gap:8px; font-size:.72rem; color:var(--sub);}
+  .controls input[type=range]{flex:1;}
+  .controls .val{width:32px; text-align:right; font-variant-numeric:tabular-nums;}
+
+  .swatches{border-radius:8px; overflow:hidden; border:1px solid var(--line);}
+  .swatch{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px; font-size:.82rem; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    cursor:pointer; position:relative;
+  }
+  .swatch .step{font-weight:600; font-family:inherit;}
+  .swatch .hex{opacity:.9;}
+  .swatch .copied{
+    position:absolute; right:12px; font-family:-apple-system,sans-serif; font-size:.7rem;
+    background:rgba(0,0,0,.55); color:#fff; padding:2px 6px; border-radius:5px; opacity:0; transition:opacity .15s;
+  }
+  .swatch.flash .copied{opacity:1;}
+
+  .export-row{display:flex; gap:8px; margin-top:10px;}
+  .export-row button{
+    flex:1; font-size:.72rem; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:#fafafa; cursor:pointer;
+  }
+  .export-row button.done{
+    background:#eef6ef; border-color:#b7d8ba; color:#1f6a2a;
+  }
+  .add-palette{
+    width:290px; min-height:120px; border:1.5px dashed var(--line); border-radius:14px;
+    display:flex; align-items:center; justify-content:center; color:var(--sub); cursor:pointer; font-size:.9rem;
+    background:transparent;
+  }
+  .add-palette:hover{border-color:var(--accent); color:var(--accent);}
+
+  .about{
+    margin-top:36px; padding-top:20px; border-top:1px solid var(--line); color:var(--sub); font-size:.82rem; line-height:1.5;
+  }
+  .about code{background:#eef0f3; padding:1px 5px; border-radius:4px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Colour Token Generator</h1>
+</header>
+
+<div class="wrap">
+  <div class="toolbar">
+    <button class="primary" id="addBtn">+ Add palette</button>
+    <button id="randomBtn">🎲 Randomize all</button>
+    <label class="range-label">Hue drift
+      <input type="range" id="driftStrength" min="0" max="40" value="0">
+    </label>
+    <div class="spacer"></div>
+    <button id="pngBtn">⬇ Download PNG</button>
+    <button id="cssBtn">⬇ Export all CSS</button>
+    <button id="jsonBtn">⬇ Export all JSON</button>
+  </div>
+
+  <div class="palettes" id="palettes"></div>
+  
+</div>
+
+<script>
+/* ---------- OKLCH <-> sRGB ---------- */
+function oklchToSrgb(L, C, Hdeg){
+  const h = Hdeg * Math.PI/180;
+  const a = C*Math.cos(h), b = C*Math.sin(h);
+  const l_ = L + 0.3963377774*a + 0.2158037573*b;
+  const m_ = L - 0.1055613458*a - 0.0638541728*b;
+  const s_ = L - 0.0894841775*a - 1.2914855480*b;
+  const l = l_**3, m = m_**3, s = s_**3;
+  let r = +4.0767416621*l -3.3077115913*m +0.2309699292*s;
+  let g = -1.2684380046*l +2.6097574011*m -0.3413193965*s;
+  let bl = -0.0041960863*l -0.7034186147*m +1.7076147010*s;
+  return [r,g,bl];
+}
+function linearToSrgb(c){
+  c = Math.min(1, Math.max(0, c));
+  return c<=0.0031308 ? 12.92*c : 1.055*Math.pow(c,1/2.4)-0.055;
+}
+function inGamut(r,g,b){ return r>=-0.001&&r<=1.001&&g>=-0.001&&g<=1.001&&b>=-0.001&&b<=1.001; }
+
+// Reduce chroma until color fits sRGB gamut, then convert to hex
+function oklchToHex(L, C, H){
+  let lo=0, hi=C, best=[0,0,0];
+  let [r,g,b] = oklchToSrgb(L,C,H);
+  if(inGamut(r,g,b)){ best=[r,g,b]; }
+  else{
+    for(let i=0;i<20;i++){
+      const mid=(lo+hi)/2;
+      const test=oklchToSrgb(L,mid,H);
+      if(inGamut(...test)){ lo=mid; best=test; } else { hi=mid; }
+    }
+  }
+  const [rr,gg,bb] = best.map(v=>Math.round(linearToSrgb(v)*255));
+  const clamp=v=>Math.min(255,Math.max(0,v));
+  return '#' + [rr,gg,bb].map(v=>clamp(v).toString(16).padStart(2,'0')).join('');
+}
+function relLuminance(hex){
+  const n = parseInt(hex.slice(1),16);
+  const r=(n>>16&255)/255, g=(n>>8&255)/255, b=(n&255)/255;
+  const f=c=> c<=0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4);
+  return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);
+}
+
+/* ---------- palette shade curve ---------- */
+const STEPS = [50,100,200,300,400,500,600,700,800,900,1000];
+const LIGHTNESS = [0.97,0.91,0.83,0.74,0.64,0.55,0.47,0.39,0.30,0.20,0.10];
+const CHROMA_MULT = [0.22,0.42,0.62,0.82,0.98,1.00,0.94,0.84,0.70,0.55,0.35];
+const DEFAULT_HUE_DRIFT_STRENGTH = 0;
+
+function buildRamp(hue, baseChroma, driftStrength){
+  return STEPS.map((step,i)=>{
+    const L = LIGHTNESS[i];
+    const C = baseChroma * CHROMA_MULT[i];
+    let H = hue;
+    if(driftStrength > 0){
+      // warmer(+) in shadows, cooler(-) in highlights, small magnitude
+      const t = (L-0.5); // -0.45..0.47
+      H = hue - t*driftStrength;
+    }
+    const hex = oklchToHex(L, C, H);
+    return {step, hex, L};
+  });
+}
+
+/* ---------- naming ---------- */
+const HUE_BUCKETS = [
+  {max:15,  names:['Ruby','Ember','Cardinal','Garnet','Crimson','Poppy']},
+  {max:45,  names:['Amber','Copper','Terracotta','Marigold','Rust','Clay']},
+  {max:70,  names:['Citrine','Honey','Saffron','Dune','Wheat','Ochre']},
+  {max:150, names:['Spring','Fern','Moss','Jade','Sage','Meadow','Pine']},
+  {max:200, names:['Lagoon','Teal','Marine','Aqua','Kelp','Cove']},
+  {max:250, names:['Lapis','Deepsea','Cobalt','Azure','Sapphire','Denim']},
+  {max:290, names:['Indigo','Iris','Violet','Twilight','Dusk']},
+  {max:330, names:['Orchid','Plum','Mulberry','Amethyst','Grape']},
+  {max:346, names:['Blossom','Rose','Flamingo','Peony','Berry']},
+  {max:361, names:['Ruby','Ember','Cardinal','Garnet','Crimson','Poppy']},
+];
+const NEUTRAL_NAMES = ['Slate','Stone','Ash','Graphite','Mist','Fog','Pebble'];
+
+function generateName(hue, chroma){
+  if(chroma < 0.035){
+    return NEUTRAL_NAMES[Math.floor(Math.random()*NEUTRAL_NAMES.length)];
+  }
+  const bucket = HUE_BUCKETS.find(b=>hue<b.max) || HUE_BUCKETS[HUE_BUCKETS.length-1];
+  return bucket.names[Math.floor(Math.random()*bucket.names.length)];
+}
+
+/* ---------- state & rendering ---------- */
+let palettes = []; // {id, name, hue, chroma}
+let idCounter = 0;
+const PAGE_GUTTER = 64;
+
+function randomPalette(){
+  const hue = Math.floor(Math.random()*360);
+  const chroma = 0.10 + Math.random()*0.15;
+  return {id: idCounter++, name: generateName(hue,chroma), hue, chroma};
+}
+
+function addPalette(p){
+  palettes.push(p || randomPalette());
+  render();
+}
+
+function getDriftStrength(){
+  const input = document.getElementById('driftStrength');
+  return input ? +input.value : DEFAULT_HUE_DRIFT_STRENGTH;
+}
+
+function updateLayoutWidth(){
+  const pageHeader = document.querySelector('header');
+  const wrap = document.querySelector('.wrap');
+  const toolbar = document.querySelector('.toolbar');
+  const container = document.getElementById('palettes');
+  if(!wrap) return;
+
+  const firstPalette = container.querySelector('.palette');
+  if(!firstPalette && !toolbar){
+    wrap.style.width = '';
+    if(pageHeader) pageHeader.style.width = '';
+    return;
+  }
+
+  let layoutWidth = 0;
+  if(firstPalette){
+    const paletteWidth = firstPalette.getBoundingClientRect().width;
+    const styles = window.getComputedStyle(container);
+    const gap = parseFloat(styles.columnGap || styles.gap || '0');
+    const availableWidth = Math.max(paletteWidth, window.innerWidth - PAGE_GUTTER);
+    const paletteCount = Math.max(1, palettes.length);
+    const maxColumns = Math.max(1, Math.floor((availableWidth + gap) / (paletteWidth + gap)));
+    const columns = Math.min(paletteCount, maxColumns);
+    layoutWidth = columns * paletteWidth + Math.max(0, columns - 1) * gap;
+  }
+
+  let toolbarWidth = 0;
+  if(toolbar){
+    const toolbarStyles = window.getComputedStyle(toolbar);
+    const toolbarGap = parseFloat(toolbarStyles.columnGap || toolbarStyles.gap || '0');
+    const horizontalPadding = parseFloat(toolbarStyles.paddingLeft || '0') + parseFloat(toolbarStyles.paddingRight || '0');
+    const horizontalBorder = parseFloat(toolbarStyles.borderLeftWidth || '0') + parseFloat(toolbarStyles.borderRightWidth || '0');
+    const childWidth = Array.from(toolbar.children).reduce((total, child)=>{
+      if(child.classList.contains('spacer')) return total;
+      return total + child.getBoundingClientRect().width;
+    }, 0);
+    const gapCount = Math.max(0, toolbar.children.length - 1);
+    toolbarWidth = childWidth + horizontalPadding + horizontalBorder + gapCount * toolbarGap;
+  }
+
+  const contentWidth = Math.max(layoutWidth, toolbarWidth);
+  const pageWidth = `${Math.ceil(contentWidth + PAGE_GUTTER)}px`;
+  wrap.style.width = pageWidth;
+  if(pageHeader) pageHeader.style.width = pageWidth;
+}
+
+function render(){
+  const driftStrength = getDriftStrength();
+  const container = document.getElementById('palettes');
+  container.innerHTML = '';
+  palettes.forEach(p=>{
+    const ramp = buildRamp(p.hue, p.chroma, driftStrength);
+    const el = document.createElement('div');
+    el.className='palette';
+    el.innerHTML = `
+      <div class="palette-head">
+        <input class="palette-name" value="${p.name}" data-id="${p.id}">
+        <div>
+          <button class="icon-btn" title="Reroll name" data-action="reroll" data-id="${p.id}">🔀</button>
+          <button class="icon-btn" title="Remove" data-action="remove" data-id="${p.id}">✕</button>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="row">Hue <input type="range" min="0" max="359" value="${p.hue}" data-action="hue" data-id="${p.id}"><span class="val">${p.hue}</span></div>
+        <div class="row">Vibrancy <input type="range" min="0" max="37" value="${Math.round(p.chroma*100)}" data-action="chroma" data-id="${p.id}"><span class="val">${p.chroma.toFixed(2)}</span></div>
+      </div>
+      <div class="swatches">
+        ${ramp.map(r=>`
+          <div class="swatch" style="background:${r.hex}; color:${r.L>0.55?'#111':'#fff'}" data-hex="${r.hex}">
+            <span class="step">${r.step}</span>
+            <span class="hex">${r.hex}</span>
+            <span class="copied">copied</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="export-row">
+        <button data-action="copyCss" data-id="${p.id}">CSS</button>
+        <button data-action="copyJson" data-id="${p.id}">JSON</button>
+      </div>
+    `;
+    container.appendChild(el);
+  });
+
+  updateLayoutWidth();
+  wireEvents();
+}
+
+function findPalette(id){ return palettes.find(p=>p.id==id); }
+
+function rampFor(p){
+  return buildRamp(p.hue,p.chroma,getDriftStrength());
+}
+
+function toCss(p){
+  const ramp = rampFor(p);
+  const slug = p.name.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  return `:root {\n` + ramp.map(r=>`  --${slug}-${r.step}: ${r.hex};`).join('\n') + `\n}`;
+}
+function toJson(p){
+  const ramp = rampFor(p);
+  const obj = {}; ramp.forEach(r=>obj[r.step]=r.hex);
+  return JSON.stringify({name:p.name, hue:p.hue, chroma:p.chroma, scale:obj}, null, 2);
+}
+async function copyText(text){
+  if(navigator.clipboard && window.isSecureContext){
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  const input = document.createElement('textarea');
+  input.value = text;
+  input.setAttribute('readonly', '');
+  input.style.position = 'absolute';
+  input.style.left = '-9999px';
+  document.body.appendChild(input);
+  input.select();
+  input.setSelectionRange(0, input.value.length);
+
+  let didCopy = false;
+  try{
+    didCopy = document.execCommand('copy');
+  } finally {
+    document.body.removeChild(input);
+  }
+
+  if(!didCopy){
+    throw new Error('Clipboard copy failed');
+  }
+  return true;
+}
+
+function flashButtonState(button, text){
+  if(!button) return;
+  const originalText = button.textContent;
+  button.textContent = text;
+  button.classList.add('done');
+  setTimeout(()=>{
+    button.textContent = originalText;
+    button.classList.remove('done');
+  }, 900);
+}
+
+function wireEvents(){
+  document.querySelectorAll('.swatch').forEach(sw=>{
+    sw.onclick = async ()=>{
+      try{
+        await copyText(sw.dataset.hex);
+        sw.classList.add('flash');
+        setTimeout(()=>sw.classList.remove('flash'), 700);
+      } catch {
+        sw.classList.remove('flash');
+      }
+    };
+  });
+  document.querySelectorAll('.palette-name').forEach(inp=>{
+    inp.onchange = e=>{ findPalette(e.target.dataset.id).name = e.target.value; };
+  });
+  document.querySelectorAll('[data-action=hue]').forEach(inp=>{
+    inp.oninput = e=>{ findPalette(e.target.dataset.id).hue = +e.target.value; render(); };
+  });
+  document.querySelectorAll('[data-action=chroma]').forEach(inp=>{
+    inp.oninput = e=>{ findPalette(e.target.dataset.id).chroma = (+e.target.value)/100; render(); };
+  });
+  document.querySelectorAll('[data-action=reroll]').forEach(btn=>{
+    btn.onclick = e=>{
+      const p = findPalette(e.target.dataset.id);
+      const next = randomPalette();
+      p.name = next.name;
+      p.hue = next.hue;
+      p.chroma = next.chroma;
+      render();
+    };
+  });
+  document.querySelectorAll('[data-action=remove]').forEach(btn=>{
+    btn.onclick = e=>{
+      palettes = palettes.filter(p=>p.id != e.target.dataset.id);
+      render();
+    };
+  });
+  document.querySelectorAll('[data-action=copyCss]').forEach(btn=>{
+    btn.onclick = async e=>{
+      const button = e.currentTarget;
+      try{
+        await copyText(toCss(findPalette(e.target.dataset.id)));
+        flashButtonState(button, 'Copied');
+      } catch {
+        flashButtonState(button, 'Failed');
+      }
+    };
+  });
+  document.querySelectorAll('[data-action=copyJson]').forEach(btn=>{
+    btn.onclick = async e=>{
+      const button = e.currentTarget;
+      try{
+        await copyText(toJson(findPalette(e.target.dataset.id)));
+        flashButtonState(button, 'Copied');
+      } catch {
+        flashButtonState(button, 'Failed');
+      }
+    };
+  });
+}
+
+/* ---------- toolbar actions ---------- */
+document.getElementById('addBtn').onclick = ()=>addPalette();
+document.getElementById('randomBtn').onclick = ()=>{
+  palettes = palettes.map(()=>randomPalette());
+  render();
+};
+document.getElementById('driftStrength').oninput = render;
+window.addEventListener('resize', updateLayoutWidth);
+
+document.getElementById('cssBtn').onclick = ()=>{
+  const text = palettes.map(toCss).join('\n\n');
+  downloadText(text, 'color-tokens.css');
+};
+document.getElementById('jsonBtn').onclick = ()=>{
+  const obj = palettes.map(p=>JSON.parse(toJson(p)));
+  downloadText(JSON.stringify(obj,null,2), 'color-tokens.json');
+};
+function downloadText(text, filename){
+  const blob = new Blob([text], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- PNG export (draws board like a style-guide swatch sheet) ---------- */
+document.getElementById('pngBtn').onclick = ()=>{
+  const driftStrength = getDriftStrength();
+  const colW = 300, rowH = 68, headH = 60, pad = 40, gap = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = pad*2 + palettes.length*colW + (palettes.length-1)*gap;
+  canvas.height = pad*2 + headH + STEPS.length*rowH;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  palettes.forEach((p,ci)=>{
+    const ramp = buildRamp(p.hue,p.chroma,driftStrength);
+    const x0 = pad + ci*(colW+gap);
+    ctx.fillStyle = '#1a1d23';
+    ctx.font = '600 22px -apple-system, Helvetica, Arial, sans-serif';
+    ctx.textBaseline='top';
+    ctx.fillText(p.name, x0, pad);
+
+    ramp.forEach((r,ri)=>{
+      const y = pad + headH + ri*rowH;
+      ctx.fillStyle = r.hex;
+      ctx.fillRect(x0, y, colW, rowH);
+      ctx.fillStyle = r.L>0.55 ? '#111111' : '#ffffff';
+      ctx.font = '600 16px ui-monospace, Menlo, Consolas, monospace';
+      ctx.fillText(String(r.step), x0+16, y+rowH/2-10);
+      ctx.font = '16px ui-monospace, Menlo, Consolas, monospace';
+      ctx.fillText(r.hex, x0+colW-100, y+rowH/2-10);
+    });
+  });
+
+  canvas.toBlob(blob=>{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download='color-tokens.png'; a.click();
+    URL.revokeObjectURL(url);
+  });
+};
+
+/* ---------- init ---------- */
+addPalette({id:idCounter++, name:'Lapis',   hue:222, chroma:0.10});
+addPalette({id:idCounter++, name:'Deepsea', hue:246, chroma:0.16});
+addPalette({id:idCounter++, name:'Spring',  hue:135, chroma:0.15});
+</script>
+</body>
+</html>
