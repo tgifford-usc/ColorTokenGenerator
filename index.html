@@ -52,6 +52,9 @@
     display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; align-content:flex-start;
     flex:1 1 auto; min-height:0; overflow-y:auto; padding-bottom:32px;
     overscroll-behavior:contain;
+    /* Classic (non-overlay) scrollbars take real width; reserve it so the
+       column count doesn't change when the scrollbar appears. */
+    scrollbar-gutter:stable;
   }
   .palette{
     background:var(--panel); border:1px solid var(--line); border-radius:14px;
@@ -281,10 +284,14 @@ function updateLayoutWidth(){
   const gutter = parseFloat(wrapStyles.paddingLeft || '0') + parseFloat(wrapStyles.paddingRight || '0');
 
   let layoutWidth = 0;
+  let scrollbarWidth = 0;
   if(firstPalette){
     const paletteWidth = firstPalette.getBoundingClientRect().width;
     const styles = window.getComputedStyle(container);
     const gap = parseFloat(styles.columnGap || styles.gap || '0');
+    // Classic scrollbars occupy layout width inside the scroller; measure the
+    // gutter so the final page width leaves room for it.
+    scrollbarWidth = container.offsetWidth - container.clientWidth;
     // clientWidth excludes the container's own vertical scrollbar, so columns
     // that fit here can't trigger horizontal overflow.
     const availableWidth = Math.max(paletteWidth, container.clientWidth);
@@ -312,7 +319,7 @@ function updateLayoutWidth(){
   // with no palettes does the toolbar's own width drive it. Capped at the
   // natural width: inside a fixed-size iframe the page must wrap content
   // rather than scroll horizontally.
-  const contentWidth = firstPalette ? layoutWidth : toolbarWidth;
+  const contentWidth = firstPalette ? layoutWidth + scrollbarWidth : toolbarWidth;
   const pageWidth = Math.min(Math.ceil(contentWidth + gutter), Math.floor(naturalWidth));
   wrap.style.width = `${pageWidth}px`;
   if(pageHeader) pageHeader.style.width = `${pageWidth}px`;
