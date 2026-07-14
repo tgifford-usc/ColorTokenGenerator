@@ -108,11 +108,9 @@
   }
   .about code{background:#eef0f3; padding:1px 5px; border-radius:4px;}
 
-  /* Below ~990px the toolbar wraps onto multiple lines; drop the spacer so
-     every row is left-aligned instead of the spacer splitting its row apart. */
-  @media (max-width: 990px){
-    .toolbar .spacer{display:none;}
-  }
+  /* When the toolbar has to wrap onto multiple lines (toggled in JS), drop the
+     spacer so every row is left-aligned instead of it splitting its row apart. */
+  .toolbar.stacked .spacer{display:none;}
 
   /* Narrow iframe widths (Canvas on mobile renders ~375-420px wide) */
   @media (max-width: 480px){
@@ -225,9 +223,10 @@ const HUE_BUCKETS = [
   {max:361, names:['Ruby','Ember','Cardinal','Garnet','Crimson','Poppy']},
 ];
 const NEUTRAL_NAMES = ['Slate','Stone','Ash','Graphite','Mist','Fog','Pebble'];
+const NEUTRAL_CHROMA_THRESHOLD = 0.035;
 
 function generateName(hue, chroma){
-  if(chroma < 0.035){
+  if(chroma < NEUTRAL_CHROMA_THRESHOLD){
     return NEUTRAL_NAMES[Math.floor(Math.random()*NEUTRAL_NAMES.length)];
   }
   const bucket = HUE_BUCKETS.find(b=>hue<b.max) || HUE_BUCKETS[HUE_BUCKETS.length-1];
@@ -243,6 +242,14 @@ function randomPalette(){
   const chroma = 0.10 + Math.random()*0.15;
   return {id: idCounter++, name: generateName(hue,chroma), hue, chroma};
 }
+
+function randomNeutralPalette(){
+  const hue = Math.floor(Math.random()*360);
+  const chroma = 0.01 + Math.random()*0.02; // below the neutral threshold: a tinted gray
+  return {id: idCounter++, name: generateName(hue,chroma), hue, chroma};
+}
+
+function isNeutral(p){ return p.chroma < NEUTRAL_CHROMA_THRESHOLD; }
 
 function addPalette(p){
   palettes.push(p || randomPalette());
@@ -301,12 +308,18 @@ function updateLayoutWidth(){
     toolbarWidth = childWidth + horizontalPadding + horizontalBorder + gapCount * toolbarGap;
   }
 
-  const contentWidth = Math.max(layoutWidth, toolbarWidth);
-  // Never exceed the natural width: inside a fixed-size iframe the page must
-  // wrap content rather than scroll horizontally.
-  const pageWidth = `${Math.min(Math.ceil(contentWidth + gutter), Math.floor(naturalWidth))}px`;
-  wrap.style.width = pageWidth;
-  if(pageHeader) pageHeader.style.width = pageWidth;
+  // The palettes define the page width and the toolbar wraps to match; only
+  // with no palettes does the toolbar's own width drive it. Capped at the
+  // natural width: inside a fixed-size iframe the page must wrap content
+  // rather than scroll horizontally.
+  const contentWidth = firstPalette ? layoutWidth : toolbarWidth;
+  const pageWidth = Math.min(Math.ceil(contentWidth + gutter), Math.floor(naturalWidth));
+  wrap.style.width = `${pageWidth}px`;
+  if(pageHeader) pageHeader.style.width = `${pageWidth}px`;
+
+  // Right-align the export buttons via the spacer only while the toolbar still
+  // fits on a single line at this width.
+  if(toolbar) toolbar.classList.toggle('stacked', toolbarWidth > pageWidth - gutter);
 }
 
 function render(){
@@ -429,7 +442,7 @@ function wireEvents(){
   document.querySelectorAll('[data-action=reroll]').forEach(btn=>{
     btn.onclick = e=>{
       const p = findPalette(e.target.dataset.id);
-      const next = randomPalette();
+      const next = isNeutral(p) ? randomNeutralPalette() : randomPalette();
       p.name = next.name;
       p.hue = next.hue;
       p.chroma = next.chroma;
@@ -469,7 +482,9 @@ function wireEvents(){
 /* ---------- toolbar actions ---------- */
 document.getElementById('addBtn').onclick = ()=>addPalette();
 document.getElementById('randomBtn').onclick = ()=>{
-  palettes = palettes.map(()=>randomPalette());
+  // Keep each palette's kind: neutrals reroll as neutrals, colours as colours,
+  // so the default colour+neutral pair survives randomizing.
+  palettes = palettes.map(p => isNeutral(p) ? randomNeutralPalette() : randomPalette());
   render();
 };
 document.getElementById('driftStrength').oninput = render;
@@ -531,9 +546,8 @@ document.getElementById('pngBtn').onclick = ()=>{
 };
 
 /* ---------- init ---------- */
-addPalette({id:idCounter++, name:'Lapis',   hue:222, chroma:0.10});
-addPalette({id:idCounter++, name:'Deepsea', hue:246, chroma:0.16});
-addPalette({id:idCounter++, name:'Spring',  hue:135, chroma:0.15});
+addPalette({id:idCounter++, name:'Lapis', hue:222, chroma:0.10});
+addPalette({id:idCounter++, name:'Slate', hue:222, chroma:0.02});
 </script>
 </body>
 </html>
