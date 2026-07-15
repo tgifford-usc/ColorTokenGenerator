@@ -264,6 +264,16 @@ function getDriftStrength(){
   return input ? +input.value : DEFAULT_HUE_DRIFT_STRENGTH;
 }
 
+function getScrollbarWidth(){
+  if(getScrollbarWidth.cached != null) return getScrollbarWidth.cached;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute; top:-9999px; width:100px; height:100px; overflow:scroll;';
+  document.body.appendChild(probe);
+  getScrollbarWidth.cached = probe.offsetWidth - probe.clientWidth;
+  document.body.removeChild(probe);
+  return getScrollbarWidth.cached;
+}
+
 function updateLayoutWidth(){
   const pageHeader = document.querySelector('header');
   const wrap = document.querySelector('.wrap');
@@ -284,14 +294,10 @@ function updateLayoutWidth(){
   const gutter = parseFloat(wrapStyles.paddingLeft || '0') + parseFloat(wrapStyles.paddingRight || '0');
 
   let layoutWidth = 0;
-  let scrollbarWidth = 0;
   if(firstPalette){
     const paletteWidth = firstPalette.getBoundingClientRect().width;
     const styles = window.getComputedStyle(container);
     const gap = parseFloat(styles.columnGap || styles.gap || '0');
-    // Classic scrollbars occupy layout width inside the scroller; measure the
-    // gutter so the final page width leaves room for it.
-    scrollbarWidth = container.offsetWidth - container.clientWidth;
     // clientWidth excludes the container's own vertical scrollbar, so columns
     // that fit here can't trigger horizontal overflow.
     const availableWidth = Math.max(paletteWidth, container.clientWidth);
@@ -300,6 +306,12 @@ function updateLayoutWidth(){
     const columns = Math.min(paletteCount, maxColumns);
     layoutWidth = columns * paletteWidth + Math.max(0, columns - 1) * gap;
   }
+  // `.palettes` reserves its scrollbar gutter unconditionally (scrollbar-gutter:
+  // stable), whether or not it's currently overflowing, so the page width must
+  // always leave room for it. Measured via an offscreen probe rather than the
+  // live container, since some browsers don't reflect the reservation in
+  // offsetWidth/clientWidth synchronously at layout time.
+  const scrollbarWidth = firstPalette ? getScrollbarWidth() : 0;
 
   let toolbarWidth = 0;
   if(toolbar){
