@@ -264,15 +264,15 @@ function getDriftStrength(){
   return input ? +input.value : DEFAULT_HUE_DRIFT_STRENGTH;
 }
 
-function getScrollbarWidth(){
-  if(getScrollbarWidth.cached != null) return getScrollbarWidth.cached;
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:absolute; top:-9999px; width:100px; height:100px; overflow:scroll;';
-  document.body.appendChild(probe);
-  getScrollbarWidth.cached = probe.offsetWidth - probe.clientWidth;
-  document.body.removeChild(probe);
-  return getScrollbarWidth.cached;
-}
+// `.palettes` reserves a scrollbar gutter unconditionally (scrollbar-gutter:
+// stable) so the column count doesn't change when a scrollbar appears. How
+// that reservation shows up in the box model is engine-inconsistent though —
+// e.g. Chrome reflects it in offsetWidth/clientWidth, Firefox doesn't seem to
+// expose it there at all — so it can't be reliably measured via JS. Instead
+// of guessing per-browser, just reserve a fixed margin wide enough for any
+// real classic scrollbar (typically 12-17px) so the last column never gets
+// pushed into a new row by a gutter our measurement missed.
+const SCROLLBAR_MARGIN = 20;
 
 function updateLayoutWidth(){
   const pageHeader = document.querySelector('header');
@@ -308,10 +308,10 @@ function updateLayoutWidth(){
   }
   // `.palettes` reserves its scrollbar gutter unconditionally (scrollbar-gutter:
   // stable), whether or not it's currently overflowing, so the page width must
-  // always leave room for it. Measured via an offscreen probe rather than the
-  // live container, since some browsers don't reflect the reservation in
-  // offsetWidth/clientWidth synchronously at layout time.
-  const scrollbarWidth = firstPalette ? getScrollbarWidth() : 0;
+  // always leave room for it. That reservation isn't reliably measurable via
+  // JS across engines (Chrome exposes it via offsetWidth/clientWidth, Firefox
+  // doesn't appear to), so use a fixed safety margin instead of measuring.
+  const scrollbarWidth = firstPalette ? SCROLLBAR_MARGIN : 0;
 
   let toolbarWidth = 0;
   if(toolbar){
